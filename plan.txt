@@ -1,0 +1,7 @@
+1. Program 3 is a Server-Client chatroom application which allow up to 255 people to simuntanously communicate with other who are on the same server. There are 3 main parts to this assignment. The server uphold all of connections from Participants and Observers. Participant has an assign username who has interaction to send messages to the server, but it can't see the message. Observer is binded to a participant, 1 to 1 binding, and can see all the sent messages.
+
+2. At this point, No.
+
+3. Timer on the participant client and observer, PUBLIC / PRIVATE messages
+
+4. Available online resources, peers who are also working on the assignment and TA, Professor
