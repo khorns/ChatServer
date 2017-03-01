@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <stdbool.h>
 
 /*------------------------------------------------------------------------
 * Program: demo_client
@@ -81,23 +82,63 @@ int main( int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Enter username: \n");
-	/* Repeatedly read data from socket and write to user's screen. */
+	char* username = (char *) malloc(100);
+	uint8_t nlen;
+	bool checkName = false;
+
+	char buf2[2];
+	char message[1001];
+
 	n = recv(sd, buf, sizeof(buf), 0);
-	printf("%d\n", n);
-	fprintf(stderr, "%c\n", buf[0]);
 
 	if (buf[0] == 'N') {
 		printf("Connection Close!!!\n");
 		close(sd);
 	}
 	else if (buf[0] == 'Y') {
-		printf("Establishing a connection\n");
+		while (!checkName) {
+			printf("Please enter a username: ");
+			// scanf("%s", username);
+			fgets(username, 100, stdin);
 
+			nlen = strlen(username);
+			nlen -= 1;
 
-		while (n > 0) {
+			// fprintf(stderr, "username: %s\n", username);
+			// fprintf(stderr, "nlen: %d\n", nlen);
 
+			send(sd, &nlen, sizeof(uint8_t), 0);
+			send(sd, username, nlen, 0);
 
+			n = recv(sd, buf2, 1, 0);
+			buf2[1] = '\0';
+			// fprintf(stderr, "%s\n", buf2);
+
+			if (buf2[0] == 'Y') {
+
+				checkName = true;
+			}
+			else if (buf2[0] == 'I' || buf2[0] == 'T') {
+				// Repeat asking for a username
+				checkName = false;
+			}
+			else if (buf2[0] == 'N') {
+				close(sd);
+				exit(0);
+			}
+		}
+
+		while (1) {
+			n = recv(sd, &nlen, sizeof(uint8_t), 0);
+			recv(sd, message, nlen, 0);
+			message[nlen] = '\0';
+
+			fprintf(stderr, "%s\n", message);
+
+			if (n == 0) {
+				close(sd);
+				break;
+			}
 		}
 	}
 
@@ -106,4 +147,3 @@ int main( int argc, char **argv) {
 
 	exit(EXIT_SUCCESS);
 }
-

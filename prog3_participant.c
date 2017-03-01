@@ -82,12 +82,12 @@ int main( int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	char* username = (char *) malloc(10);
+	char* username = (char *) malloc(100);
 	uint8_t nlen;
 	bool checkName = false;
 
 	char buf2[2];
-	char message[1000];
+	char message[1001];
 
 	n = recv(sd, buf, sizeof(buf), 0);
 
@@ -98,9 +98,11 @@ int main( int argc, char **argv) {
 	else if (buf[0] == 'Y') {
 		while (!checkName) {
 			printf("Please enter a username:\n");
-			scanf("%s", username);
-			// fgets(username, 10, stdin);
+			// scanf("%s", username);
+			fgets(username, 100, stdin);
+
 			nlen = strlen(username);
+			nlen -= 1;
 
 			// fprintf(stderr, "username: %s\n", username);
 			// fprintf(stderr, "nlen: %d\n", nlen);
@@ -121,15 +123,8 @@ int main( int argc, char **argv) {
 				checkName = false;
 			}
 		}
-		fgets(message, 1000, stdin);
 
 		while (1) {
-
-			// strcpy(message, "");
-			// char* message = (char*) malloc(1000); 
-			// memset(message, '\n', 1);
-			// fprintf(stderr, "message: %s\n", message);
-			// fprintf(stderr, "nlen: %d\n", nlen);
 			fprintf(stderr, "Enter Message: ");
 			fgets(message, 1000, stdin);
 
@@ -138,10 +133,6 @@ int main( int argc, char **argv) {
 			message[nlen] = '\0';
 
 			if (nlen > 0) {
-				// fprintf(stderr, "%s\n", message);
-				// fprintf(stderr, "%d\n", nlen);
-				// scanf("%[^\n]%*c", message);
-
 				send(sd, &nlen, sizeof(uint8_t), 0);
 				send(sd, message, nlen, 0);
 			}
