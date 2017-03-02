@@ -97,7 +97,7 @@ int main( int argc, char **argv) {
 	}
 	else if (buf[0] == 'Y') {
 		while (!checkName) {
-			printf("Please enter a username:\n");
+			printf("Please enter a username: ");
 			// scanf("%s", username);
 			fgets(username, 100, stdin);
 

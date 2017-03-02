@@ -47,6 +47,8 @@
 *------------------------------------------------------------------------
 */
 
+bool checkMessage(char* message);
+
 typedef struct {
 	int sd;				// its socket
 	int obs_sd;			// Obs socket
@@ -268,7 +270,7 @@ int main(int argc, char **argv) {
 				if (obs_array_size < MAX) {
 					//First send to the observer
 					send(new_soc, "Y", 1, 0);
-					fprintf(stderr, "Connect an Observer\n");
+					// fprintf(stderr, "Connect an Observer\n");
 
 					for (int i = 0; i < MAX; i++) {
 						if (obs_array[i].sd == -1) {
@@ -299,10 +301,11 @@ int main(int argc, char **argv) {
 						n = recv(obs_array[i].sd, buf, nlen, 0);
 
 						buf[nlen] = '\0';
+						char retry = 'N';
 
 						if (nlen <= 10) {
 							// Checking the criteria for a valid username
-							fprintf(stderr, "%s: is entered\n", buf);
+							// fprintf(stderr, "%s: is entered\n", buf);
 							bool checkValid = true;
 							int nameLen = strlen(buf);
 
@@ -316,12 +319,17 @@ int main(int argc, char **argv) {
 										printf("Aleady in used by %s\n", par_array[j].username);
 										checkValid = false;
 										send(obs_array[i].sd, "T", 1, 0);
+										retry = 'T';
 									}
 									break;
 								}
 								else {
 									checkValid = false;
 								}
+							}
+
+							if (retry == 'T') {
+								break;
 							}
 
 							if (checkValid) {
@@ -349,8 +357,8 @@ int main(int argc, char **argv) {
 
 								if (checkValid) {
 									strcpy(obs_array[i].username, buf);
-									// par_array[i].obs_sd = obs_array[i].sd;
-									par_array[i].obs_sd = i;
+									// par_array[i].obs_sd = i;
+
 									send(obs_array[i].sd, "Y", 1, 0);
 
 									fprintf(stderr, "A new observer has joined\n");
@@ -360,13 +368,14 @@ int main(int argc, char **argv) {
 										if (obs_array[j].sd != -1){
 											send(obs_array[j].sd, &nlen, sizeof(uint8_t), 0);
 											send(obs_array[j].sd, "A new observer has joined", nlen, 0);
+
+											if (strcmp(obs_array[i].username, par_array[j].username) == 0) {
+												par_array[j].obs_sd = i;
+												obs_array[i].par_sd = j;
+											}
 										}
 									}
-								}
-								// else {
-								// 	fprintf(stderr, "%s: is not valid\n", buf);
-								// 	send(obs_array[i].sd, "I", 1, 0);	
-								// }						
+								}				
 							}
 							else {
 								send(obs_array[i].sd, "N", 1, 0);
@@ -382,11 +391,13 @@ int main(int argc, char **argv) {
 						}
 					}
 					else if (recv(obs_array[i].sd, &nlen, sizeof(uint8_t), 0) == 0){
+						int index = obs_array[i].par_sd;
 						obs_array[i].sd = -1;
 						obs_array[i].par_sd = -1;
 						strcpy(obs_array[i].username," ");
 						obs_array_size--;
 						fprintf(stderr, "An observer has Disconnected\n");
+						par_array[index].obs_sd = -1;
 					}
 				}
 
@@ -394,7 +405,6 @@ int main(int argc, char **argv) {
 				if (FD_ISSET(par_array[i].sd, &readfds)) {
 					if (strcmp(par_array[i].username, " ") == 0) {				// Continue with different messages
 						// Setting up username for the participant
-						// uint8_t nlen;
 						n = recv(par_array[i].sd, &nlen, sizeof(uint8_t), 0);
 						n = recv(par_array[i].sd, buf, nlen, 0);
 
@@ -420,43 +430,49 @@ int main(int argc, char **argv) {
 										checkValid = false;
 										break;
 									}
-
 									if (buf[j] >= 58 && buf[j] <= 64) {
 										checkValid = false;
 										break;
 									}
-
 									if (buf[j] >= 91 && buf[j] <= 96) {
 										checkValid = false;
 										break;
 									}
-
 									if (buf[j] >= 123 && buf[j] <= 127) {
 										checkValid = false;
 										break;
 									}
-
 								}
 
 								if (checkValid) {
 									strcpy(par_array[i].username, buf);
 									send(par_array[i].sd, "Y", 1, 0);
+									fprintf(stderr, "User %s has joined\n", par_array[i].username);
 								}
 								else {
 									fprintf(stderr, "%s: is not valid\n", buf);
 									send(par_array[i].sd, "I", 1, 0);	
 								}						
 							}
-
 						}
 						else {
 							fprintf(stderr, "%s: is not valid\n", buf);
 							send(par_array[i].sd, "I", 1, 0);		// Invalid
 						}
 
-
 					}
 					else if (recv(par_array[i].sd, &nlen, sizeof(uint8_t), 0) == 0) {
+						
+						char new_message[1015];
+						sprintf(new_message, "User %s has left\n", par_array[i].username);
+						nlen = strlen(new_message);
+						for (int j = 0; j < MAX; j++) {
+							if (obs_array[j].sd != -1){
+								send(obs_array[j].sd, &nlen, sizeof(uint8_t), 0);
+								send(obs_array[j].sd, new_message, nlen, 0);
+							}
+						}
+
 						// D/C the observer
 						int index = par_array[i].obs_sd;
 						close(obs_array[index].sd);
@@ -479,21 +495,81 @@ int main(int argc, char **argv) {
 						n = recv(par_array[i].sd, message, nlen, 0);
 						message[nlen] = '\0';
 
-						char new_message[1015];
+						// Checking for a private message
+						if (checkMessage(message)) {
+							// printf("private message from %s\n", par_array[i].username);
+							char reciever[11];
+							int count = 0;
+							char new_message[1000];
+							char final_message[1015];
 
-						sprintf(new_message, ">%11s: %s\n", par_array[i].username, message);
-						nlen += 14;
-
-						for (int j = 0; j < MAX; j++) {
-							if (obs_array[j].sd != -1){
-								send(obs_array[j].sd, &nlen, sizeof(uint8_t), 0);
-								// send(obs_array[j].sd, message, nlen, 0);
-								send(obs_array[j].sd, new_message, nlen, 0);
+							// get reciever name
+							for (int j = 1; j < nlen; j++) {
+								if (message[j] == ' ') {
+									break;
+								}
+								else {
+									reciever[j-1] = message[j];
+									count++;
+								}
+								
 							}
+							reciever[count] = '\0';
+							int k = 0;
+
+							// get the message inside
+							for (int j = count+2; j < nlen; j++) {
+								new_message[k] = message[j];
+								k++;
+							}
+
+							new_message[k] = '\0';
+							sprintf(final_message, "*%11s: %s", par_array[i].username, new_message);
+							printf("%s", final_message);
+							nlen = strlen(final_message);
+
+							bool found = false;
+
+							for (int j = 0; j < MAX; j++) {
+								if (strcmp(reciever, par_array[j].username) == 0) {
+									found = true;
+									
+									if (obs_array[par_array[i].obs_sd].sd != -1) {
+										send(obs_array[par_array[i].obs_sd].sd, &nlen, sizeof(uint8_t), 0);
+										send(obs_array[par_array[i].obs_sd].sd, final_message, nlen, 0);
+									}
+
+									if (obs_array[par_array[j].obs_sd].sd) {
+										send(obs_array[par_array[j].obs_sd].sd, &nlen, sizeof(uint8_t), 0);
+										send(obs_array[par_array[j].obs_sd].sd, final_message, nlen, 0);
+									}
+									break;
+								}
+							}
+
+							if (!found) {
+								if (obs_array[par_array[i].obs_sd].sd != -1) {
+									sprintf(final_message, "Warning: User %s doesn't exist...\n", reciever);
+									nlen = strlen(final_message);
+									send(obs_array[par_array[i].obs_sd].sd, &nlen, sizeof(uint8_t), 0);
+									send(obs_array[par_array[i].obs_sd].sd, final_message, nlen, 0);
+								}
+							}
+
 						}
+						else {
+							char new_message[1015];
+							sprintf(new_message, ">%11s: %s\n", par_array[i].username, message);
+							nlen += 14;
 
-						fprintf(stderr, ">%11s: %s\n", par_array[i].username, message);
-
+							for (int j = 0; j < MAX; j++) {
+								if (obs_array[j].sd != -1){
+									send(obs_array[j].sd, &nlen, sizeof(uint8_t), 0);
+									send(obs_array[j].sd, new_message, nlen, 0);
+								}
+							}
+							fprintf(stderr, ">%11s: %s\n", par_array[i].username, message);
+						}
 					}
 					
 				}
@@ -506,4 +582,13 @@ int main(int argc, char **argv) {
 	}
 	// end while
 
+}
+
+bool checkMessage(char* message) {
+	bool pri = false;
+
+	if (message[0] == '@') {
+		pri = true;
+	}
+	return pri;
 }
