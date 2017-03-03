@@ -47,12 +47,10 @@
 *------------------------------------------------------------------------
 */
 
-bool checkMessage(char* message);
-void printAll(char* message, int nlen);
 
 typedef struct {
 	int sd;						// its socket
-	int obs_sd;					// Obs socket
+	int obs_sd;					// Obs socket (Store in the index to the observer)
 	char username[10];  		// Username
 	struct timeval coolDown;	// Timeout for entering username
 } par_sock;
@@ -73,6 +71,10 @@ bool pending = false;
 
 int timeInSec = 5;
 
+bool checkMessage(char* message);
+void printAll(char* message, int nlen);
+void timeup (par_sock par_array[], obs_sock obs_array[]);
+bool checkPending (par_sock par_array[], obs_sock obs_array[]);
 
 int main(int argc, char **argv) {
 	struct protoent *ptrp; /* pointer to a protocol table entry */
@@ -184,9 +186,6 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	// printf("Hello World\n");
-
-
 	// Init the par_array
 	for (int i = 0; i < MAX; i++) {
 		par_array[i].sd = -1;
@@ -197,7 +196,6 @@ int main(int argc, char **argv) {
 	}
 
 	for(int i = 0; i < MAX; i++){
-		// obs_array[j] = -1;
 		obs_array[i].sd = -1;
 		obs_array[i].par_sd = -1;
 		strcpy(obs_array[i].username, " ");
@@ -234,42 +232,12 @@ int main(int argc, char **argv) {
 			}
 		}
 
-
-		// Checking how has timer
-		for (int i = 0; i < MAX; i++) {
-			// Participant
-			if (par_array[i].sd != -1 && par_array[i].coolDown.tv_sec > 0) {
-				printf("find a victim %d \n", par_array[i].sd);
-
-				pending = true;
-				if (minTime.tv_sec == 0) {
-					minTime.tv_sec = par_array[i].coolDown.tv_sec;
-				}
-				else if (par_array[i].coolDown.tv_sec < minTime.tv_sec) {
-					minTime.tv_sec = par_array[i].coolDown.tv_sec;
-				}
-			}
-
-			// Observer
-			if (obs_array[i].sd != -1 && obs_array[i].coolDown.tv_sec > 0) {
-				printf("find a victim %d \n", obs_array[i].sd);
-
-				pending = true;
-				if (minTime.tv_sec == 0) {
-					minTime.tv_sec = obs_array[i].coolDown.tv_sec;
-				}
-				else if (obs_array[i].coolDown.tv_sec < minTime.tv_sec) {
-					minTime.tv_sec = obs_array[i].coolDown.tv_sec;
-				}
-			}
-		}
-
-		time.tv_sec = minTime.tv_sec;
+		pending = checkPending(par_array, obs_array);
 
 		// Choosing one of the select
 		if (pending) {
+			time.tv_sec = minTime.tv_sec;
 			stuff = select(fin_sd + 1, &readfds, NULL, NULL, &time);
-			// pending = false;
 		}
 		else
 			stuff = select(fin_sd + 1, &readfds, NULL, NULL, NULL);	
@@ -284,7 +252,6 @@ int main(int argc, char **argv) {
 
 				// Check for an available spot for a new participant
 				if (par_array_size < MAX) {
-					//First send to the participant
 					send(new_soc, "Y", 1, 0);
 
 					for (int i = 0; i < MAX; i++) {
@@ -319,7 +286,6 @@ int main(int argc, char **argv) {
 				if (obs_array_size < MAX) {
 					//First send to the observer
 					send(new_soc, "Y", 1, 0);
-					// fprintf(stderr, "Connect an Observer\n");
 
 					for (int i = 0; i < MAX; i++) {
 						if (obs_array[i].sd == -1) {
@@ -352,7 +318,6 @@ int main(int argc, char **argv) {
 
 						if (nlen <= 10) {
 							// Checking the criteria for a valid username
-							// fprintf(stderr, "%s: is entered\n", buf);
 							bool checkValid = true;
 							int nameLen = strlen(buf);
 
@@ -381,19 +346,7 @@ int main(int argc, char **argv) {
 
 							if (checkValid) {
 								for (int j = 0; j < nameLen; j++) {
-									if (buf[j] >= 0 && buf[j] <= 47) {
-										checkValid = false;
-										break;
-									}
-									if (buf[j] >= 58 && buf[j] <= 64) {
-										checkValid = false;
-										break;
-									}
-									if (buf[j] >= 91 && buf[j] <= 96) {
-										checkValid = false;
-										break;
-									}
-									if (buf[j] >= 123 && buf[j] <= 127) {
+									if ((buf[j] >= 0 && buf[j] <= 47) || (buf[j] >= 58 && buf[j] <= 64) || (buf[j] >= 91 && buf[j] <= 96) || (buf[j] >= 123 && buf[j] <= 127)) {
 										checkValid = false;
 										break;
 									}
@@ -401,7 +354,8 @@ int main(int argc, char **argv) {
 
 								if (checkValid) {
 									strcpy(obs_array[i].username, buf);
-									par_array[i].coolDown.tv_sec = -1;
+									obs_array[i].coolDown.tv_sec = -1;
+
 									send(obs_array[i].sd, "Y", 1, 0);
 									fprintf(stderr, "A new observer has joined\n");
 
@@ -432,7 +386,7 @@ int main(int argc, char **argv) {
 							send(obs_array[i].sd, "I", 1, 0);		// Invalid for enter more than 10 characters
 						}
 					}
-					else if (recv(obs_array[i].sd, &nlen, sizeof(uint8_t), 0) == 0){
+					else if (recv(obs_array[i].sd, &nlen, sizeof(uint8_t), 0) == 0){	// Observer Ctrl+C
 						int index = obs_array[i].par_sd;
 						obs_array[i].sd = -1;
 						obs_array[i].par_sd = -1;
@@ -454,33 +408,20 @@ int main(int argc, char **argv) {
 
 						if (nlen <= 10) {
 							// Checking the criteria for a valid username
-							// fprintf(stderr, "%s: is entered\n", buf);
 							bool checkValid = true;
 							int nameLen = strlen(buf);
 
 							for (int j = 0; j < MAX; j++) {
 								if (strcmp(buf, par_array[j].username) == 0) {
-									// printf("There is a duplicate!\n");
 									checkValid = false;
+									par_array[i].coolDown.tv_sec = timeInSec;
 									send(par_array[i].sd, "T", 1, 0);
 								}
 							}
 
 							if (checkValid) {
 								for (int j = 0; j < nameLen; j++) {
-									if (buf[j] >= 0 && buf[j] <= 47) {
-										checkValid = false;
-										break;
-									}
-									if (buf[j] >= 58 && buf[j] <= 64) {
-										checkValid = false;
-										break;
-									}
-									if (buf[j] >= 91 && buf[j] <= 96) {
-										checkValid = false;
-										break;
-									}
-									if (buf[j] >= 123 && buf[j] <= 127) {
+									if ((buf[j] >= 0 && buf[j] <= 47) || (buf[j] >= 58 && buf[j] <= 64) || (buf[j] >= 91 && buf[j] <= 96) || (buf[j] >= 123 && buf[j] <= 127)) {
 										checkValid = false;
 										break;
 									}
@@ -514,11 +455,13 @@ int main(int argc, char **argv) {
 
 						// D/C the observer
 						int index = par_array[i].obs_sd;
-						close(obs_array[index].sd);
-						obs_array[index].sd = -1;
-						obs_array[index].par_sd = -1;
-						strcpy(obs_array[index].username," ");
-						obs_array_size--;
+						if (index != -1) {
+							close(obs_array[index].sd);
+							obs_array[index].sd = -1;
+							obs_array[index].par_sd = -1;
+							strcpy(obs_array[index].username," ");
+							obs_array_size--;
+						}
 
 						// Disconnect participant
 						fprintf(stderr, "User %s has left\n", par_array[i].username);
@@ -526,7 +469,6 @@ int main(int argc, char **argv) {
 						par_array[i].obs_sd = -1;
 						strcpy(par_array[i].username," ");
 						par_array_size--;
-
 
 					}
 					else {
@@ -536,7 +478,6 @@ int main(int argc, char **argv) {
 
 						// Checking for a private message
 						if (checkMessage(message)) {
-							// printf("private message from %s\n", par_array[i].username);
 							char reciever[11];
 							int count = 0;
 							char new_message[1000];
@@ -564,7 +505,7 @@ int main(int argc, char **argv) {
 
 							new_message[k] = '\0';
 							sprintf(final_message, "*%11s: %s", par_array[i].username, new_message);
-							printf("%s", final_message);
+
 							nlen = strlen(final_message);
 
 							bool found = false;
@@ -598,8 +539,8 @@ int main(int argc, char **argv) {
 						}
 						else {
 							char new_message[1015];
-							sprintf(new_message, ">%11s: %s\n", par_array[i].username, message);
-							nlen += 14;
+							sprintf(new_message, ">%11s: %s", par_array[i].username, message);
+							nlen = strlen(new_message);
 							printAll(new_message, nlen);
 							fprintf(stderr, ">%11s: %s\n", par_array[i].username, message);
 						}
@@ -614,44 +555,7 @@ int main(int argc, char **argv) {
 			if (pending) {
 				printf("Time is up\n");
 
-				for (int i = 0; i < MAX; i++) {
-					// Participant
-					if (par_array[i].sd != -1 && par_array[i].coolDown.tv_sec > 0) {
-						par_array[i].coolDown.tv_sec -= minTime.tv_sec;
-
-						if (par_array[i].coolDown.tv_sec <= 0) {
-							close(par_array[i].sd);
-							par_array[i].coolDown.tv_sec = timeInSec;
-							par_array[i].sd = -1;
-							par_array[i].obs_sd = -1;
-							strcpy(par_array[i].username," ");
-						}
-
-						printf("Getting here%d\n", par_array[i].sd);
-					}
-					else {
-						par_array[i].coolDown.tv_sec = -1;
-					}
-
-					// Observer
-					if (obs_array[i].sd != -1 && obs_array[i].coolDown.tv_sec > 0) {
-						obs_array[i].coolDown.tv_sec -= minTime.tv_sec;
-
-						if (obs_array[i].coolDown.tv_sec <= 0) {
-							close(obs_array[i].sd);
-							obs_array[i].coolDown.tv_sec = timeInSec;
-							obs_array[i].sd = -1;
-							obs_array[i].par_sd = -1;
-							strcpy(obs_array[i].username," ");
-						}
-
-						printf("Getting here%d\n", obs_array[i].sd);
-					}
-					else {
-						obs_array[i].coolDown.tv_sec = -1;
-					}
-
-				}
+				timeup(par_array, obs_array);
 
 				minTime.tv_sec = 0;
 				pending = false; 
@@ -663,6 +567,87 @@ int main(int argc, char **argv) {
 }
 
 
+/**
+*	Checking for any participant / observer who has not yet to enter a name
+*	return - true (The Select will run with a timer)
+*/
+bool checkPending (par_sock par_array[], obs_sock obs_array[]) {
+	pending = false;
+	// Checking how has timer
+	for (int i = 0; i < MAX; i++) {
+		// Participant
+		if (par_array[i].sd != -1 && par_array[i].coolDown.tv_sec > 0) {
+			printf("find a participant %d \n", par_array[i].sd);
+
+			pending = true;
+			if (minTime.tv_sec == 0) {
+				minTime.tv_sec = par_array[i].coolDown.tv_sec;
+			}
+			else if (par_array[i].coolDown.tv_sec < minTime.tv_sec) {
+				minTime.tv_sec = par_array[i].coolDown.tv_sec;
+			}
+		}
+
+		// Observer
+		if (obs_array[i].sd != -1 && obs_array[i].coolDown.tv_sec > 0) {
+			printf("find a observer %d \n", obs_array[i].sd);
+
+			pending = true;
+			printf("minTime : %ld\n", minTime.tv_sec);
+
+			if (minTime.tv_sec == 0) {
+				minTime.tv_sec = obs_array[i].coolDown.tv_sec;
+			}
+			else if (obs_array[i].coolDown.tv_sec < minTime.tv_sec) {
+				minTime.tv_sec = obs_array[i].coolDown.tv_sec;
+			}
+
+			printf("minTime : %ld\n", minTime.tv_sec);
+		}
+	}
+	return pending;
+}
+
+
+/** 
+*	When time is up, go and update all the participant and observer timer
+*/
+void timeup (par_sock par_array[], obs_sock obs_array[]) {
+	for (int i = 0; i < MAX; i++) {
+		// Participant
+		if (par_array[i].sd != -1 && par_array[i].coolDown.tv_sec > 0) {
+			par_array[i].coolDown.tv_sec -= minTime.tv_sec;
+
+			if (par_array[i].coolDown.tv_sec <= 0) {
+				close(par_array[i].sd);
+				par_array[i].coolDown.tv_sec = timeInSec;
+				par_array[i].sd = -1;
+			}
+		}
+		else {
+			par_array[i].coolDown.tv_sec = -1;
+		}
+
+		// Observer
+		if (obs_array[i].sd != -1 && obs_array[i].coolDown.tv_sec > 0) {
+			obs_array[i].coolDown.tv_sec -= minTime.tv_sec;
+
+			if (obs_array[i].coolDown.tv_sec <= 0) {
+				close(obs_array[i].sd);
+				obs_array[i].coolDown.tv_sec = timeInSec;
+				obs_array[i].sd = -1;
+			}
+		}
+		else {
+			obs_array[i].coolDown.tv_sec = -1;
+		}
+	}
+}
+
+
+/**
+*	Sending a message to all the valid observer(s)
+*/ 
 void printAll(char* message, int nlen) {
 	for (int j = 0; j < MAX; j++) {
 		if (obs_array[j].sd != -1){
@@ -673,6 +658,9 @@ void printAll(char* message, int nlen) {
 }
 
 
+/** 
+*	Take a peek at first character of the message to see if the message is for private
+*/
 bool checkMessage(char* message) {
 	bool pri = false;
 
