@@ -90,6 +90,8 @@ int main( int argc, char **argv) {
 	char message[1001];
 
 	n = recv(sd, buf, sizeof(buf), 0);
+	bool conti = true;
+
 
 	if (buf[0] == 'N') {
 		printf("Connection Close!!!\n");
@@ -107,8 +109,8 @@ int main( int argc, char **argv) {
 			// fprintf(stderr, "username: %s\n", username);
 			// fprintf(stderr, "nlen: %d\n", nlen);
 
-			send(sd, &nlen, sizeof(uint8_t), 0);
-			send(sd, username, nlen, 0);
+			n = send(sd, &nlen, sizeof(uint8_t), 0);
+			n = send(sd, username, nlen, 0);
 
 			n = recv(sd, buf2, 1, 0);
 			buf2[1] = '\0';
@@ -124,7 +126,7 @@ int main( int argc, char **argv) {
 			}
 		}
 
-		while (1) {
+		while (conti) {
 			fprintf(stderr, "Enter Message: ");
 			fgets(message, 1000, stdin);
 
