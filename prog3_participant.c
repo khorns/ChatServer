@@ -106,15 +106,11 @@ int main( int argc, char **argv) {
 			nlen = strlen(username);
 			nlen -= 1;
 
-			// fprintf(stderr, "username: %s\n", username);
-			// fprintf(stderr, "nlen: %d\n", nlen);
-
 			n = send(sd, &nlen, sizeof(uint8_t), 0);
 			n = send(sd, username, nlen, 0);
 
 			n = recv(sd, buf2, 1, 0);
 			buf2[1] = '\0';
-			// fprintf(stderr, "%s\n", buf2);
 
 			if (buf2[0] == 'Y') {
 
@@ -135,8 +131,13 @@ int main( int argc, char **argv) {
 			message[nlen] = '\0';
 
 			if (nlen > 0) {
-				send(sd, &nlen, sizeof(uint8_t), 0);
-				send(sd, message, nlen, 0);
+				if (n = send(sd, &nlen, sizeof(uint8_t), 0) > 0) {
+					send(sd, message, nlen, 0);					
+				}
+				else {
+					close(sd);
+					exit(0);
+				}
 			}
 		}
 	}
