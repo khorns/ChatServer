@@ -62,7 +62,7 @@ typedef struct {
 	struct timeval coolDown;	// Timeout for entering username
 } obs_sock;
 
-struct timeval time = {5,0};
+struct timeval time = {0,0};
 struct timeval minTime = {0,0};
 struct timeval prevTime = {0,0};
 
@@ -200,6 +200,8 @@ int main(int argc, char **argv) {
 		obs_array[i].sd = -1;
 		obs_array[i].par_sd = -1;
 		strcpy(obs_array[i].username, " ");
+		obs_array[i].coolDown.tv_sec = 0;
+		obs_array[i].coolDown.tv_usec = 0;
 	}
 
 	int stuff = 0;
@@ -238,6 +240,7 @@ int main(int argc, char **argv) {
 		// Choosing one of the select
 		if (pending) {
 			time.tv_sec = minTime.tv_sec;
+			prevTime.tv_sec = time.tv_sec;
 			stuff = select(fin_sd + 1, &readfds, NULL, NULL, &time);
 		}
 		else
@@ -312,6 +315,14 @@ int main(int argc, char **argv) {
 				if (FD_ISSET(obs_array[i].sd, &readfds)) {
 					if (strcmp(obs_array[i].username, " ") == 0) {
 						n = recv(obs_array[i].sd, &nlen, sizeof(uint8_t), 0);
+
+						if (n == 0) {
+							close(obs_array[i].sd);
+							obs_array[i].sd = -1;
+							break;
+
+						}
+
 						n = recv(obs_array[i].sd, buf, nlen, 0);
 
 						buf[nlen] = '\0';
@@ -403,7 +414,17 @@ int main(int argc, char **argv) {
 					if (strcmp(par_array[i].username, " ") == 0) {
 						// Setting up username for the participant
 						n = recv(par_array[i].sd, &nlen, sizeof(uint8_t), 0);
+						
+						if (n == 0) {
+							close(par_array[i].sd);
+							par_array[i].sd = -1;
+							break;
+
+						}
+
 						n = recv(par_array[i].sd, buf, nlen, 0);
+
+
 
 						buf[nlen] = '\0';
 
@@ -549,9 +570,7 @@ int main(int argc, char **argv) {
 						}
 					}
 				}
-				
 			}
-
 		}
 		else {
 			//Time is up
@@ -565,7 +584,6 @@ int main(int argc, char **argv) {
 			}
 		}
 	}	// end while
-	
 
 }
 
@@ -580,7 +598,6 @@ bool checkPending (par_sock par_array[], obs_sock obs_array[]) {
 	for (int i = 0; i < MAX; i++) {
 		// Participant
 		if (par_array[i].sd != -1 && par_array[i].coolDown.tv_sec > 0) {
-			// printf("find a participant %d \n", par_array[i].sd);
 
 			pending = true;
 			if (minTime.tv_sec == 0) {
@@ -596,7 +613,10 @@ bool checkPending (par_sock par_array[], obs_sock obs_array[]) {
 			// printf("find a observer %d \n", obs_array[i].sd);
 
 			pending = true;
-			// printf("minTime : %ld\n", minTime.tv_sec);
+			printf("minTime : %ld\n", minTime.tv_sec);
+
+			// printf("all Time : %ld - %ld\n", prevTime.tv_sec, time.tv_sec);
+			// obs_array[i].coolDown.tv_sec -= (prevTime.tv_sec - time.tv_sec);
 
 			if (minTime.tv_sec <= 0) {
 				minTime.tv_sec = obs_array[i].coolDown.tv_sec;
@@ -605,7 +625,7 @@ bool checkPending (par_sock par_array[], obs_sock obs_array[]) {
 				minTime.tv_sec = obs_array[i].coolDown.tv_sec;
 			}
 
-			// printf("minTime : %ld\n", minTime.tv_sec);
+			printf("minTime : %ld\n", minTime.tv_sec);
 		}
 	}
 
@@ -624,7 +644,9 @@ void timeup (par_sock par_array[], obs_sock obs_array[]) {
 	for (int i = 0; i < MAX; i++) {
 		// Participant
 		if (par_array[i].sd != -1 && par_array[i].coolDown.tv_sec > 0) {
-			par_array[i].coolDown.tv_sec -= minTime.tv_sec;
+
+			par_array[i].coolDown.tv_sec -= (prevTime.tv_sec - time.tv_sec);
+			printf("par : %ld\n", par_array[i].coolDown.tv_sec);
 
 			if (par_array[i].coolDown.tv_sec <= 0) {
 				close(par_array[i].sd);
@@ -638,7 +660,8 @@ void timeup (par_sock par_array[], obs_sock obs_array[]) {
 
 		// Observer
 		if (obs_array[i].sd != -1 && obs_array[i].coolDown.tv_sec > 0) {
-			obs_array[i].coolDown.tv_sec -= minTime.tv_sec;
+
+			obs_array[i].coolDown.tv_sec -= (prevTime.tv_sec - time.tv_sec);
 
 			if (obs_array[i].coolDown.tv_sec <= 0) {
 				close(obs_array[i].sd);
