@@ -13,7 +13,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -95,21 +94,16 @@ int main( int argc, char **argv) {
 	else if (buf[0] == 'Y') {
 		while (!checkName) {
 			printf("Please enter a username: ");
-			// scanf("%s", username);
 			fgets(username, 100, stdin);
 
 			nlen = strlen(username);
 			nlen -= 1;
-
-			// fprintf(stderr, "username: %s\n", username);
-			// fprintf(stderr, "nlen: %d\n", nlen);
 
 			send(sd, &nlen, sizeof(uint8_t), 0);
 			send(sd, username, nlen, 0);
 
 			n = recv(sd, buf2, 1, 0);
 			buf2[1] = '\0';
-			// fprintf(stderr, "%s\n", buf2);
 
 			if (buf2[0] == 'Y') {
 

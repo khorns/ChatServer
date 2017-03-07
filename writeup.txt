@@ -1,1 +1,9 @@
-writeup.txt
+1. Sereyvathanak Khorn
+
+2. Timer is implemented by not perfect. The known issue in which I don't know how to fix is decementing time individual participant and observer. The concept is straight forward, but I have worked on the problem for more than 6 hours.
+
+The current behaviour would be once an observer/participant connects, they have a 60 secs time to enter their username. They would get a time reset to 60 secs again if somebody who is already connect the server is interacting with it.
+
+3. Nothing is fancy when come to testing this program. One terminal run the server while have a few more terminal run the participants and obsersers.
+
+4. The most challenging aspect of the program is following all the specified protocol and implementing timer.
