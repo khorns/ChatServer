@@ -2,14 +2,13 @@
 *	prog3_server.c
 *	CSCI 367
 *  
-*	Description: 
+*	Description: The server of the program that will run and wait for participants and
+*					Obsersers clients to join / disconnect at any moment. Panticipants 
+* 					can send either public / private messages to other participants.
 *  
 *	Sereyvathanak Khorn
 * 	
 */
-
-
-/* demo_server.c - code for example server program that uses TCP */
 
 #include <sys/types.h> 
 #include <sys/socket.h>
@@ -30,23 +29,6 @@
 #define par 255
 #define obs 255
 #define MAX 255
-
-/*------------------------------------------------------------------------
-* Program: demo_server
-*
-* Purpose: allocate a socket and then repeatedly execute the following:
-* (1) wait for the next connection from a client
-* (2) send a short message to the client
-* (3) close the connection
-* (4) go back to step (1)
-*
-* Syntax: ./demo_server port
-*
-* port - protocol port number to use
-*
-*------------------------------------------------------------------------
-*/
-
 
 typedef struct {
 	int sd;						// its socket
@@ -76,6 +58,9 @@ bool checkMessage(char* message);
 void printAll(char* message, int nlen);
 void timeup (par_sock par_array[], obs_sock obs_array[]);
 bool checkPending (par_sock par_array[], obs_sock obs_array[]);
+void initClientSpace();
+void DCPar(par_sock par_array[], int i, int par_array_size);
+bool validateName(char* buf, int nlen);
 
 int main(int argc, char **argv) {
 	struct protoent *ptrp; /* pointer to a protocol table entry */
@@ -87,13 +72,11 @@ int main(int argc, char **argv) {
 	int alen; /* length of address */
 	int optval = 1; /* boolean value when we set socket option */
 	char buf[10]; /* buffer for string the server sends */
-	// int port2; // Observer port
 	uint16_t port;
 	uint16_t port2;
 
 	int par_array_size = 0;
 	int obs_array_size = 0;
-
 	
 	// int obs_array[obs];
 	fd_set readfds;
@@ -160,7 +143,7 @@ int main(int argc, char **argv) {
 	}
 
 	///////////////////////////////////////////////////////////////////
-	//For second bind
+	//For second bind for observer
 
 	/* Create a socket for Observer*/
 	sd2 = socket(PF_INET, SOCK_STREAM, ptrp->p_proto);
@@ -187,22 +170,7 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
-	// Init the par_array
-	for (int i = 0; i < MAX; i++) {
-		par_array[i].sd = -1;
-		par_array[i].obs_sd = -1;
-		strcpy(par_array[i].username," ");
-		par_array[i].coolDown.tv_sec = 0;
-		par_array[i].coolDown.tv_usec = 0;
-	}
-
-	for(int i = 0; i < MAX; i++){
-		obs_array[i].sd = -1;
-		obs_array[i].par_sd = -1;
-		strcpy(obs_array[i].username, " ");
-		obs_array[i].coolDown.tv_sec = 0;
-		obs_array[i].coolDown.tv_usec = 0;
-	}
+	initClientSpace();
 
 	int stuff = 0;
 	int new_soc = 0;
@@ -296,7 +264,6 @@ int main(int argc, char **argv) {
 							obs_array[i].sd = new_soc;
 							obs_array[i].coolDown.tv_sec = timeInSec;
 							obs_array_size++;
-							// pending = false;
 							break;
 						}
 					}
@@ -320,11 +287,9 @@ int main(int argc, char **argv) {
 							close(obs_array[i].sd);
 							obs_array[i].sd = -1;
 							break;
-
 						}
 
 						n = recv(obs_array[i].sd, buf, nlen, 0);
-
 						buf[nlen] = '\0';
 						char retry = 'N';
 
@@ -357,12 +322,7 @@ int main(int argc, char **argv) {
 							}
 
 							if (checkValid) {
-								for (int j = 0; j < nameLen; j++) {
-									if ((buf[j] >= 0 && buf[j] <= 47) || (buf[j] >= 58 && buf[j] <= 64) || (buf[j] >= 91 && buf[j] <= 96) || (buf[j] >= 123 && buf[j] <= 127)) {
-										checkValid = false;
-										break;
-									}
-								}
+								checkValid = validateName(buf, nameLen);
 
 								if (checkValid) {
 									strcpy(obs_array[i].username, buf);
@@ -424,8 +384,6 @@ int main(int argc, char **argv) {
 
 						n = recv(par_array[i].sd, buf, nlen, 0);
 
-
-
 						buf[nlen] = '\0';
 
 						if (nlen <= 10) {
@@ -442,12 +400,8 @@ int main(int argc, char **argv) {
 							}
 
 							if (checkValid) {
-								for (int j = 0; j < nameLen; j++) {
-									if ((buf[j] >= 0 && buf[j] <= 47) || (buf[j] >= 58 && buf[j] <= 64) || (buf[j] >= 91 && buf[j] <= 96) || (buf[j] >= 123 && buf[j] <= 127)) {
-										checkValid = false;
-										break;
-									}
-								}
+
+								checkValid = validateName(buf, nameLen);
 
 								if (checkValid) {		///*********************************
 									strcpy(par_array[i].username, buf);
@@ -488,11 +442,7 @@ int main(int argc, char **argv) {
 						}
 
 						// Disconnect participant
-						fprintf(stderr, "User %s has left\n", par_array[i].username);
-						par_array[i].sd = -1;
-						par_array[i].obs_sd = -1;
-						strcpy(par_array[i].username," ");
-						par_array_size--;
+						DCPar(par_array, i, par_array_size);
 
 					}
 					else {
@@ -682,8 +632,8 @@ void timeup (par_sock par_array[], obs_sock obs_array[]) {
 void printAll(char* message, int nlen) {
 	for (int j = 0; j < MAX; j++) {
 		if (obs_array[j].sd != -1){
-			send(obs_array[j].sd, &nlen, sizeof(uint8_t), 0);
-			send(obs_array[j].sd, message, nlen, 0);
+			send(obs_array[j].sd, &nlen, sizeof(uint8_t), MSG_DONTWAIT);
+			send(obs_array[j].sd, message, nlen, MSG_NOSIGNAL);
 		}
 	}
 }
@@ -699,4 +649,52 @@ bool checkMessage(char* message) {
 		pri = true;
 	}
 	return pri;
+}
+
+
+/** 
+*	Inintialize array space for both the participants and the observers
+*/
+void initClientSpace() {
+	for (int i = 0; i < MAX; i++) {
+		par_array[i].sd = -1;
+		par_array[i].obs_sd = -1;
+		strcpy(par_array[i].username," ");
+		par_array[i].coolDown.tv_sec = 0;
+		par_array[i].coolDown.tv_usec = 0;
+	}
+
+	for(int i = 0; i < MAX; i++){
+		obs_array[i].sd = -1;
+		obs_array[i].par_sd = -1;
+		strcpy(obs_array[i].username, " ");
+		obs_array[i].coolDown.tv_sec = 0;
+		obs_array[i].coolDown.tv_usec = 0;
+	}
+}
+
+/** 
+*	Disconnecting a partipant and reset the par_array slot
+*/
+void DCPar(par_sock par_array[], int i, int par_array_size) {
+	fprintf(stderr, "User %s has left\n", par_array[i].username);
+	par_array[i].sd = -1;
+	par_array[i].obs_sd = -1;
+	strcpy(par_array[i].username," ");
+	par_array_size--;
+}
+
+
+/** 
+*	Validate a name that should follow the naming protocol
+*/
+bool validateName(char* buf, int nLen) {
+	bool valid = true;
+	for (int j = 0; j < nLen; j++) {
+		if ((buf[j] >= 0 && buf[j] <= 47) || (buf[j] >= 58 && buf[j] <= 64) || (buf[j] >= 91 && buf[j] <= 96) || (buf[j] >= 123 && buf[j] <= 127)) {
+			valid = false;
+			break;
+		}
+	}
+	return valid;
 }

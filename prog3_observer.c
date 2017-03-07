@@ -1,4 +1,13 @@
-/* demo_client.c - code for example client program that uses TCP */
+/*
+*	prog3_observer.c
+*	CSCI 367
+*  
+*	Description: Observer will be prompted for username input. Once approved, the client is confirmed
+*					to affiliate with one of a known participant and will be able to see messages.
+*  
+*	Sereyvathanak Khorn
+* 	
+*/
 
 #include <stdio.h>
 #include <string.h>
@@ -12,18 +21,6 @@
 #include <netdb.h>
 #include <stdbool.h>
 
-/*------------------------------------------------------------------------
-* Program: demo_client
-*
-* Purpose: allocate a socket, connect to a server, and print all output
-*
-* Syntax: ./demo_client server_address server_port
-*
-* server_address - name of a computer on which server is executing
-* server_port    - protocol port number server is using
-*
-*------------------------------------------------------------------------
-*/
 int main( int argc, char **argv) {
 	struct hostent *ptrh; /* pointer to a host table entry */
 	struct protoent *ptrp; /* pointer to a protocol table entry */
@@ -142,8 +139,6 @@ int main( int argc, char **argv) {
 		}
 	}
 
-
 	close(sd);
-
 	exit(EXIT_SUCCESS);
 }
